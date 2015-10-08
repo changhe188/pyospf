@@ -18,28 +18,34 @@ Try following APIs to get the OSPF data.
 
 ### Get LSDB
 
-http://<ip>:7000/lsdb
+```
+Get http://<ip>:7000/lsdb
+```
 
 ### Get LSA by type
 
-http://<ip>:7000/lsdb/router
+```
+Get http://<ip>:7000/lsdb/router
 
-http://<ip>:7000/lsdb/network
+Get http://<ip>:7000/lsdb/network
 
-http://<ip>:7000/lsdb/summary
+Get http://<ip>:7000/lsdb/summary
 
-http://<ip>:7000/lsdb/sum-asbr
+Get http://<ip>:7000/lsdb/sum-asbr
 
-http://<ip>:7000/lsdb/external
+Get http://<ip>:7000/lsdb/external
 
-http://<ip>:7000/lsdb/nssa
+Get http://<ip>:7000/lsdb/nssa
 
-http://<ip>:7000/lsdb/opaque-9
+Get http://<ip>:7000/lsdb/opaque-9
 
-http://<ip>:7000/lsdb/opaque-10
+Get http://<ip>:7000/lsdb/opaque-10
 
-http://<ip>:7000/lsdb/opaque-11
+Get http://<ip>:7000/lsdb/opaque-11
+```
 
 ### Get Statistics
  
-http://<ip>:7000/stat
+```
+Get http://<ip>:7000/stat
+```
