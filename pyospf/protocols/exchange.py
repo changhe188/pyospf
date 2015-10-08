@@ -4,11 +4,11 @@
 
 from dpkt.ospf import OSPF
 
-from pyospf.core.basics.ospfPacket import *
-from pyospf.core.basics.ospfSock import *
-from pyospf.core.protocols.protocol import *
+from pyospf.basic.ospfPacket import *
+from pyospf.basic.ospfSock import OspfSock
+from pyospf.protocols.protocol import *
 from pyospf.utils.timer import Timer
-# from sender.event import *
+from pyospf.basic.constant import *
 
 
 class ExchangeProtocol(OspfProtocol):
@@ -20,17 +20,17 @@ class ExchangeProtocol(OspfProtocol):
         self.init = 0
         self.more = 0
         self.ms = 0
-        self._rlsLastDDTimer = None
+        self._rls_last_dd_timer = None
 
         self.nsm = nsm
         self.dst = ALL_SPF_ROUTER   # by default
 
-        if self.nsm.ism.linkType == 'Broadcast':
-            if self.nsm.ism.drIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.drIp)
-            if self.nsm.ism.bdrIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.bdrIp)
-        elif self.nsm.ism.linkType == 'Point-to-Point':
+        if self.nsm.ism.link_type == 'Broadcast':
+            if self.nsm.ism.drip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.drip)
+            if self.nsm.ism.bdrip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.bdrip)
+        elif self.nsm.ism.link_type == 'Point-to-Point':
             self.dst = util.int2ip(self.nsm.src)
         else:
         #TODO: if link type is virtual or others, set dst specific.
@@ -38,31 +38,30 @@ class ExchangeProtocol(OspfProtocol):
 
         #ospf socket
         self._sock = OspfSock()
-        self._sock.bind(self.nsm.ism.ipIntfAddr)
+        self._sock.bind(self.nsm.ism.ip_intf_addr)
 
     def __del__(self):
         self._sock.close()
 
     def set_dd_options(self):
-        dolist = list(util.int2bin(self.nsm.ddFlags))
+        dolist = list(util.int2bin(self.nsm.dd_flags))
         self.init, self.more, self.ms = dolist[-3], dolist[-2], dolist[-1]
 
     def gen_dd(self, lsa=None):
-
         #In dd packet, the mtu is 1500 by default, but in virtual link, mtu is must set to 0
         #TODO: set virtual link mtu
         dd = DBDesc(
             mtu=self.nsm.ism.mtu,
-            ddoptions=self.nsm.ddFlags,
+            ddoptions=self.nsm.dd_flags,
             options=self.options,
-            ddseq=self.nsm.ddSeqnum,
+            ddseq=self.nsm.dd_seqnum,
         )
 
-        #TODO: unimplement to send probe's dd
-        if lsa != None:
+        #TODO: unimplemented to send probe's dd
+        if not lsa is None:
             pass
 
-        ospfPacket = OSPF(
+        ospf_packet = OSPF(
             v=self.version,
             type=2,             # 2 for dd
             area=self.area,
@@ -71,7 +70,7 @@ class ExchangeProtocol(OspfProtocol):
             data=dd
         )
 
-        return str(ospfPacket)
+        return str(ospf_packet)
 
     def check_dd(self, pkt):
         """
@@ -85,27 +84,17 @@ class ExchangeProtocol(OspfProtocol):
         r, mtu = pkt['V']['RID'], pkt['V']['V']['MTU']
         opt = pkt['V']['V']['OPTS']
 
-        #Attention: when receiving a dd, reset the inactive timer. This is not in rfc.
-        # if not self.nsm._inactiveTimer is None:
-#            self.nsm._inactiveTimer.reset()
-#             pass
-
-        lastOspfOpt = self.nsm.options  # save current ospf options
+        last_ospf_opt = self.nsm.options  # save current ospf options
         self.nsm.options = opt   # update nsm ospf options
 
-        tmpLastRecv = None      # save last recv packet
+        tmp_last_recv = None      # save last recv packet
         if self.nsm.last_recv != (seq, i, m, mss):
-            tmpLastRecv = self.nsm.last_recv
+            tmp_last_recv = self.nsm.last_recv
             self.nsm.last_recv = (seq, i, m, mss)
 
         #check mtu, if neighbor's mtu greater than our interface, drop it
         if self.nsm.ism.mtu < mtu:
             LOG.warn('[Exchange] Deny for bigger MTU.')
-            # self.nsm.ism.ai.oi.msgHandler.record_event(Event.str_event(
-            #     'MTU_MISMATCH',
-            #     self.nsm.ism.ai.oi.processId,
-            #     [util.int2ip(self.nsm.rtid), self.nsm.ism.mtu, mtu]
-            # ))
             return False
 
         if self.nsm.state == NSM_STATE['NSM_Down'] or self.nsm.state == NSM_STATE['NSM_Attempt']:
@@ -125,8 +114,8 @@ class ExchangeProtocol(OspfProtocol):
                 self.more = 1
                 self.ms = 0     # set myself slave, use master dd seq number
 
-                self.nsm.ddSeqnum = pkt['V']['V']['DDSEQ']
-                self.nsm.ddFlags = 4 * self.init + 2 * self.more + self.ms
+                self.nsm.dd_seqnum = pkt['V']['V']['DDSEQ']
+                self.nsm.dd_flags = 4 * self.init + 2 * self.more + self.ms
                 LOG.info('[NSM] Event: NSM_NegotiationDone')
                 LOG.info('[NSM] We are slave.')
                 self.nsm.fire('NSM_NegotiationDone')
@@ -135,9 +124,9 @@ class ExchangeProtocol(OspfProtocol):
                 self.init = 0
                 self.more = 1
                 self.ms = 1     # set myself master, use my dd seq number
-                self.nsm.ddSeqnum += 1
+                self.nsm.dd_seqnum += 1
 
-                self.nsm.ddFlags = 4 * self.init + 2 * self.more + self.ms
+                self.nsm.dd_flags = 4 * self.init + 2 * self.more + self.ms
                 LOG.info('[NSM] Event: NSM_NegotiationDone')
                 LOG.info('[NSM] We are master.')
                 self.nsm.fire('NSM_NegotiationDone')
@@ -150,7 +139,7 @@ class ExchangeProtocol(OspfProtocol):
 
         if self.nsm.state == NSM_STATE['NSM_Exchange']:
 
-            if (seq, i, m, mss) == tmpLastRecv:
+            if (seq, i, m, mss) == tmp_last_recv:
                 if self.ms == 1:
                     LOG.warn('[Exchange] Duplicate DD packet, drop as master.')
                     return False
@@ -166,8 +155,8 @@ class ExchangeProtocol(OspfProtocol):
                 return False
 
             #check whether ospf option is as same as the last received ospf packet
-            if not lastOspfOpt is None:
-                if lastOspfOpt != pkt['V']['V']['OPTS']:
+            if not last_ospf_opt is None:
+                if last_ospf_opt != pkt['V']['V']['OPTS']:
                     LOG.warn('[Exchange] DD packet OSPF options are not same as the last received packet.')
                     self.nsm.fire('NSM_SeqNumberMismatch')
                     return False
@@ -182,16 +171,16 @@ class ExchangeProtocol(OspfProtocol):
             #when more bit is 0, exchange stop, goto loading state
             if m == 0:
                 if self.ms == 0:    # If we are slave, send dd as reply.
-                    self.nsm.ddSeqnum = seq
+                    self.nsm.dd_seqnum = seq
                     #all pass checked, send my dd to neighbor
                     self.exchange()
                 self.nsm.fire('NSM_ExchangeDone')
             else:
                 #if probe is master, ddseq + 1; if slave, set ddseq to master ddseq
                 if self.ms == 1:
-                    self.nsm.ddSeqnum += 1
+                    self.nsm.dd_seqnum += 1
                 else:
-                    self.nsm.ddSeqnum = seq
+                    self.nsm.dd_seqnum = seq
                 #all pass checked, send my dd to neighbor
                 self.exchange()
 
@@ -200,8 +189,8 @@ class ExchangeProtocol(OspfProtocol):
         elif self.nsm.state == NSM_STATE['NSM_Loading'] or self.nsm.state == NSM_STATE['NSM_Full']:
 
             #check whether ospf option is as same as the last received ospf packet
-            if not lastOspfOpt is None:
-                if lastOspfOpt != pkt['V']['V']['OPTS']:
+            if not last_ospf_opt is None:
+                if last_ospf_opt != pkt['V']['V']['OPTS']:
                     LOG.warn('[Exchange] DD packet OSPF options are not same as the last received packet.')
                     self.nsm.fire('NSM_SeqNumberMismatch')
                     return False
@@ -222,66 +211,64 @@ class ExchangeProtocol(OspfProtocol):
                     return False
                 LOG.warn('[Exchange] Duplicate DD packet, retransmit as slave.')
                 self.send_dd(self.nsm.last_send)
-
                 return True
         else:
             pass
 
     def send_dd(self, pkt):
-        if self.nsm.ism.linkType == 'Broadcast' and self.dst != self.nsm.ism.drIp and self.dst != self.nsm.ism.bdrIp:
-            if self.nsm.ism.drIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.drIp)
-            if self.nsm.ism.bdrIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.bdrIp)
+        if self.nsm.ism.link_type == 'Broadcast' and self.dst != self.nsm.ism.drip and self.dst != self.nsm.ism.bdrip:
+            if self.nsm.ism.drip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.drip)
+            if self.nsm.ism.bdrip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.bdrip)
         self._sock.conn(self.dst)
 
         LOG.info('[Exchange] Send DD to %s.' % self.dst)
         self._sock.sendp(pkt)
 
-        self.nsm.ism.ai.oi.sendDDCount += 1
-        self.nsm.ism.ai.oi.totalSendPacketCount += 1
+        self.nsm.ism.ai.oi.stat.send_dd_count += 1
+        self.nsm.ism.ai.oi.stat.total_send_packet_count += 1
 
         if self.nsm.state == NSM_STATE['NSM_Loading'] or self.nsm.state == NSM_STATE['NSM_Full']:
             self.nsm.last_send = pkt    # save the last sent packet
 
             #start a timer to wait dead interval to release the last recv packet
-            if self._rlsLastDDTimer is None or self._rlsLastDDTimer.isStop():
-                self._rlsLastDDTimer = Timer(self.nsm.ism.deadInterval, self._rls_last_dd, once=True)
-                self._rlsLastDDTimer.start()
+            if self._rls_last_dd_timer is None or self._rls_last_dd_timer.is_stop():
+                self._rls_last_dd_timer = Timer(self.nsm.ism.dead_interval, self._rls_last_dd, once=True)
+                self._rls_last_dd_timer.start()
             else:
-                self._rlsLastDDTimer.reset()
+                self._rls_last_dd_timer.reset()
 
     def _rls_last_dd(self):
         LOG.debug('[Exchange] Release last send DD packet.')
         self.nsm.last_send = None
 
     def _get_lsa(self, pkt):
-
         aid = pkt['V']['AID']
-        lsaHdrList = pkt['V']['V']['LSAS']
-        for lsah in lsaHdrList.keys():
-            tp, id, adv, seq = lsaHdrList[lsah]['T'],\
-                                 lsaHdrList[lsah]['LSID'],\
-                                 lsaHdrList[lsah]['ADVRTR'],\
-                                 lsaHdrList[lsah]['LSSEQNO'],\
+        lsa_hdr_list = pkt['V']['V']['LSAS']
+        for lsah in lsa_hdr_list.keys():
+            tp, lsid, adv, seq = lsa_hdr_list[lsah]['T'],\
+                                 lsa_hdr_list[lsah]['LSID'],\
+                                 lsa_hdr_list[lsah]['ADVRTR'],\
+                                 lsa_hdr_list[lsah]['LSSEQNO'],\
 
             #generate lsa key according to lsa type.
             if tp == 5:
                 #check if a type-5 lsa into a stub area, return false
                 if self.nsm.ism.options['E'] == 0:
                     return False
-                lsaKey = (tp, id, adv)
+                lsakey = (tp, lsid, adv)
             else:
-                lsaKey = (tp, aid, id, adv)
+                lsakey = (tp, aid, lsid, adv)
 
-            lsaList = self.lookup_lsa_list(tp, self.nsm.ism.ai.oi)
-            if not lsaList is None:
-                lsa = self.lookup_lsa(lsaKey, lsaList)
+            lsalist = self.nsm.ism.ai.oi.lsdb.lookup_lsa_list(tp)
+            if not lsalist is None:
+                lsa = self.lookup_lsa(lsakey, lsalist)
                 if lsa is None:
-                    self.nsm.ls_req.append(lsaKey)
+                    self.nsm.ls_req.append(lsakey)
                 elif lsa['H']['LSSEQNO'] < seq:
                     #the lsa in dd is newer than lsa in the database
-                    self.nsm.ls_req.append(lsaKey)
+                    self.nsm.ls_req.append(lsakey)
                 else:
                     continue
             #if did not find the lsa list
@@ -291,81 +278,73 @@ class ExchangeProtocol(OspfProtocol):
         return True
 
     def exchange(self):
-        #TODO: Attention: need to verify when to set more bit
+        #TODO: The probe always set more bit to 0 when exchange. Need to modify if we want to send probe's DD summary.
         lsa = self.nsm.db_sum
-        toSend = []
-        lsaLength = 0
-        if len(self.nsm.db_sum) < self.nsm.ism.mtu - 52:  # 52 means ip header length and ospf+dd header length
-            self.more = 0   # set more bit 0
-            self.nsm.ddFlags = 4 * int(self.init) + 2 * int(self.more) + int(self.ms)
-        for h in lsa:
-            lsaLength += 20
-            if lsaLength > self.nsm.ism.mtu - 52:
-                break
-            toSend.append(h)
-            self.nsm.db_sum.remove(h)
+        tosend = lsa
+        self.more = 0   # set more bit 0
+        self.nsm.dd_flags = 4 * int(self.init) + 2 * int(self.more) + int(self.ms)
+        LOG.debug('[Exchange] DD flag is %s.' % self.nsm.dd_flags)
 
-        self.send_dd(self.gen_dd(toSend))
+        self.send_dd(self.gen_dd(tosend))
 
     def gen_lsr(self, rq):
         pkts = []
-        maxLsa = 100
+        maxlsa = 100
         more = True
 
         #In each LSR packet, it contains 100 lsa headers at max
         while more:
-            if len(rq) - maxLsa > 0:
-                lsas, rq = rq[:maxLsa], rq[maxLsa:]
+            if len(rq) - maxlsa > 0:
+                lsas, rq = rq[:maxlsa], rq[maxlsa:]
             else:
                 lsas = rq
                 more = False
 
-            lsrData = []
-            lsrLen = len(lsas) * len(LSR())
+            lsrdata = []
+            lsrlen = len(lsas) * len(LSR())
 
             for r in lsas:
                 if r[0] == 5:
-                    lsrData.append(str(LSR(
+                    lsrdata.append(str(LSR(
                         lstype=r[0],
                         lsid=r[1],
                         adv=r[2]
                     )))
                 else:
-                    lsrData.append(str(LSR(
+                    lsrdata.append(str(LSR(
                         lstype=r[0],
                         lsid=r[2],
                         adv=r[3]
                     )))
 
-            ospfPacket = OSPF(
+            ospf_packet = OSPF(
                 v=self.version,
                 type=3,             # 3 for lsr
                 area=self.area,
-                len=lsrLen + len(OSPF()),
+                len=lsrlen + len(OSPF()),
                 router=self.rid,
-                data=''.join(lsrData)
+                data=''.join(lsrdata)
             )
 
-            pkts.append(str(ospfPacket))
-
+            pkts.append(str(ospf_packet))
         return pkts
 
     def send_lsr(self, pkts):
-        if self.nsm.ism.linkType == 'Broadcast' and self.dst != self.nsm.ism.drIp and self.dst != self.nsm.ism.bdrIp:
-            if self.nsm.ism.drIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.drIp)
-            if self.nsm.ism.bdrIp == self.nsm.src:
-                self.dst = util.int2ip(self.nsm.ism.bdrIp)
+        if self.nsm.ism.link_type == 'Broadcast' and self.dst != self.nsm.ism.drip and self.dst != self.nsm.ism.bdrip:
+            if self.nsm.ism.drip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.drip)
+            if self.nsm.ism.bdrip == self.nsm.src:
+                self.dst = util.int2ip(self.nsm.ism.bdrip)
         LOG.debug('[Exchange] Send LSR to %s.' % self.dst)
         self._sock.conn(self.dst)
         for p in pkts:
             self._sock.sendp(p)
 
-            self.nsm.ism.ai.oi.sendLSRCount += 1
-            self.nsm.ism.ai.oi.totalSendPacketCount += 1
+            self.nsm.ism.ai.oi.stat.send_lsr_count += 1
+            self.nsm.ism.ai.oi.stat.total_send_packet_count += 1
 
     def check_lsr(self, pkt):
-        '''
-        It seems probe doesn't need to receive LSR
-        '''
+        """
+        The probe doesn't need to receive LSR
+        """
         pass

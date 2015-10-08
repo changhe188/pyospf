@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-__author__ = 'changhe'
 
 import threading
 
-lsdbLock = threading.RLock()
 neighborLock = threading.RLock()
-updateLsaLock = threading.RLock()
-delLsaLock = threading.RLock()
 datetimeLock = threading.RLock()
 
 ALL_SPF_ROUTER = '224.0.0.5'

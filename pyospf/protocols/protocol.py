@@ -5,7 +5,7 @@
 import logging
 
 from pyospf.utils import util
-from pyospf.core.basics.variable import *
+from pyospf.basic.constant import *
 
 
 LOG = logging.getLogger(__name__)
@@ -14,54 +14,27 @@ LOG = logging.getLogger(__name__)
 class OspfProtocol(object):
 
     version = 2
-    helloInterval = 10  # default
-    deadInterval = 4 * helloInterval
+    hello_interval = 10  # default
+    dead_interval = 4 * hello_interval
     area = 0
     rid = 0
     options = 0
-
 
     def set_ospf_header(self, v, a, r, o):
         self.version = v
         self.area = util.ip2int(a)
         self.rid = util.ip2int(r)
-        self.options = self.calc_ospf_options(o)
+        self.options = self.convert_options_to_int(o)
 
     @staticmethod
-    def lookup_lsa_list(tp, oi):
-        """
-        search the lsa should exist in which lsa list.
-        """
-        if tp == 1:  # router-lsa
-            return oi.area.routerLsa
-        elif tp == 2:
-            return oi.area.networkLsa
-        elif tp == 3:
-            return oi.area.summaryLsa
-        elif tp == 4:
-            return oi.area.summaryAsbrLsa
-        elif tp == 5:  # as-external-lsa
-            return oi.asExternalLsa
-        elif tp == 7:
-            return oi.nssaLsa
-        elif tp == 9:
-            return oi.area.opaque9Lsa
-        elif tp == 10:
-            return oi.area.opaque10Lsa
-        elif tp == 11:
-            return oi.opaque11Lsa
-        else:
-            return None
-
-    @staticmethod
-    def lookup_lsa(lsa, lsaList):
+    def lookup_lsa(lsa, lsa_list):
         """
         :param lsa: is a tuple, like (type, id, adv)
         search in router-lsa, network-lsa, summary-lsa, as-external-lsa to find whether the lsa exists.
         :return entire lsa
         """
-        if lsaList.has_key(lsa):
-            return lsaList[lsa]
+        if lsa in lsa_list:
+            return lsa_list[lsa]
         else:
             return None
 
@@ -93,13 +66,41 @@ class OspfProtocol(object):
         return None
 
     @staticmethod
-    def calc_ospf_options(opt):
+    def generate_lsa_key(lsa):
         """
-        revert dictionary ospf options to int
+        Generate the key of the LSA.
+        :param lsa:
+        :return:
         """
-        if type(opt) != type({}) or len(opt) != 8:
+        tp, lsid, adv, aid = lsa['H']['T'], lsa['H']['LSID'], lsa['H']['ADVRTR'], lsa['AREA']
+        if int(lsa['H']['T']) == 5:
+            ls = str((tp, lsid, adv))
+        else:
+            ls = str((tp, aid, lsid, adv))
+        return ls, tp, aid, lsid, adv
+
+    @staticmethod
+    def convert_options_to_int(opt):
+        """
+        convert dictionary ospf options to int
+        """
+        if (not isinstance(opt, dict)) or len(opt) != 8:
             return None
         return opt['Q'] + opt['E'] * 2\
                + opt['MC'] * 4 + opt['NP'] * 8\
                + opt['L'] * 16 + opt['DC'] * 32\
                + opt['O'] * 64 + opt['DN'] * 128
+
+    @staticmethod
+    def parse_options_config(opt):
+        """
+        Convert the config parameter options to dictionary
+        :param opt: options config string
+        :return: options in dictionary type
+        """
+        opt_dict = {'Q': 0, 'E': 0, 'MC': 0, 'NP': 0, 'L': 0, 'DC': 0, 'O': 0, 'DN': 0}
+        list_options = opt.split(',')
+        for bit in opt_dict.keys():
+            if bit in list_options:
+                opt_dict[bit] = 1
+        return opt_dict

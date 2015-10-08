@@ -5,13 +5,12 @@
 import time
 import logging
 
-from protocols.flood import FloodProtocol
-from protocols.exchange import ExchangeProtocol
-from basics.variable import *
+from pyospf.protocols.flood import FloodProtocol
+from pyospf.protocols.exchange import ExchangeProtocol
+from pyospf.basic.constant import *
 
 from pyospf.utils import util
 from pyospf.utils.timer import Timer
-# from sender.event import Event
 
 
 LOG = logging.getLogger(__name__)
@@ -28,12 +27,12 @@ class NSM(object):
     def __init__(self, ism, rtid, pkt):
         #OSPF neighbor information
         self.state = NSM_STATE['NSM_Down']           # NSM status.
-        self._inactiveTimer = None
-        self._ddExStartTimer = None
-        self._lsrResendTimer = None
+        self._inactive_timer = None
+        self._dd_exstart_timer = None
+        self.lsr_resend_timer = None
 
-        self.ddFlags = 0        # DD bit flags. Slave or master.
-        self.ddSeqnum = 0       # DD Sequence Number.
+        self.dd_flags = 0        # DD bit flags. Slave or master.
+        self.dd_seqnum = 0       # DD Sequence Number.
 
         #Last sent Database Description packet.
         self.last_send = None   # just the packet, not tuple
@@ -60,7 +59,7 @@ class NSM(object):
         self.bd_router = pkt['V']['V']['BDESIG']
 
         #inactive timer is equal to dead interval
-        self.inactiveTimerInterval = self.ism.deadInterval
+        self.inactive_timer_interval = self.ism.dead_interval
 
         self.ep = ExchangeProtocol(self)
         self.fp = FloodProtocol(self)
@@ -91,17 +90,14 @@ class NSM(object):
 
     def reset(self):
         self.change_nsm_state('NSM_Down')
-        # self.ism.ai.oi.msgHandler.record_event\
-        #                 (Event.str_event('ADJ_DOWN', self.ism.ai.oi.processId, util.int2ip(self.rtid)))
-
-        if self._ddExStartTimer is not None:
-            self._ddExStartTimer.stop()
-            del self._ddExStartTimer
-        if self._lsrResendTimer is not None:
-            self._lsrResendTimer.stop()
-            del self._lsrResendTimer
-        self._ddExStartTimer = None
-        self._lsrResendTimer = None
+        if self._dd_exstart_timer is not None:
+            self._dd_exstart_timer.stop()
+            del self._dd_exstart_timer
+        if self.lsr_resend_timer is not None:
+            self.lsr_resend_timer.stop()
+            del self.lsr_resend_timer
+        self._dd_exstart_timer = None
+        self.lsr_resend_timer = None
 
         self.ls_req = list()
         self.ls_rxmt = list()
@@ -111,7 +107,7 @@ class NSM(object):
         self.last_send_ts = 0
 
         #Delete all LSA in LSDB
-        self.ism.ai.oi.del_all_lsa()
+        self.ism.ai.oi.lsdb.empty_lsdb()
 
     def dead(self):
         neighborLock.acquire()
@@ -122,10 +118,10 @@ class NSM(object):
         self.priority = 0
         self.d_router = 0
         self.bd_router = 0
-        if self._inactiveTimer is not None:
-            self._inactiveTimer.stop()
-            del self._inactiveTimer
-            self._inactiveTimer = None
+        if self._inactive_timer is not None:
+            self._inactive_timer.stop()
+            del self._inactive_timer
+            self._inactive_timer = None
         LOG.info('[ISM] Event: ISM_NeighborChange')
         self.ism.fire('ISM_NeighborChange')
         neighborLock.release()
@@ -134,14 +130,14 @@ class NSM(object):
         if self.state == NSM_STATE['NSM_Down']:
             self.change_nsm_state('NSM_Init')
             #start inactive timer
-            if self._inactiveTimer is None or self._inactiveTimer.isStop():
-                self._inactiveTimer = Timer(self.inactiveTimerInterval, self.dead)
-                self._inactiveTimer.start()
-                LOG.debug('[NSM] %s Starts inactive timer.' % util.int2ip(self.rtid))
+            if self._inactive_timer is None or self._inactive_timer.is_stop():
+                self._inactive_timer = Timer(self.inactive_timer_interval, self.dead)
+                self._inactive_timer.start()
+                LOG.debug('[NSM] %s starts inactive timer.' % util.int2ip(self.rtid))
             else:
-                self._inactiveTimer.reset()
+                self._inactive_timer.reset()
         else:
-            self._inactiveTimer.reset()
+            self._inactive_timer.reset()
 
     def _attempt(self):
         """
@@ -159,35 +155,32 @@ class NSM(object):
         self.ls_req = list()
         self.ls_rxmt = list()
         self.db_sum = list()
-        if not self._lsrResendTimer is None:
-            self._lsrResendTimer.stop()
+        if not self.lsr_resend_timer is None:
+            self.lsr_resend_timer.stop()
 
     def _two_way_or_exstart(self):
         #whether become adjacent in broadcast, rfc 10.4
         if self.state == NSM_STATE['NSM_Init'] or self.state == NSM_STATE['NSM_TwoWay']:
             #need to make adjacency
-            if self.ism.bdrIp == self.src or self.ism.drIp == self.src or self.ism.linkType == 'Point-to-Point':
-                # self.ism.ai.oi.msgHandler.record_event\
-                #         (Event.str_event('ADJ_EST', self.ism.ai.oi.processId, util.int2ip(self.rtid)))
+            if self.ism.bdrip == self.src or self.ism.drip == self.src or self.ism.link_type == 'Point-to-Point':
                 self.change_nsm_state('NSM_ExStart')
 
                 #Generate dd_sum from each lsa list, and exception for virtual link and stub area.
-                # But as a probe, we need not to send dd_sum.
+                #But as a probe, we need not to send dd_sum.
 
                 #start dd sync procedure
-
-                self.ddSeqnum = int(time.time())
-                self.ddFlags = 7    # set init bit, more bit, master bit
+                self.dd_seqnum = int(time.time())
+                self.dd_flags = 7    # set init bit, more bit, master bit
                 self._send_dd()
-                if self._ddExStartTimer is None:
+                if self._dd_exstart_timer is None:
                     pass
-                elif self._ddExStartTimer.isStop():
-                    del self._ddExStartTimer
+                elif self._dd_exstart_timer.is_stop():
+                    del self._dd_exstart_timer
                 else:
-                    self._ddExStartTimer.stop()
-                    del self._ddExStartTimer
-                self._ddExStartTimer = Timer(self.ism.rxmtInterval, self._send_dd)
-                self._ddExStartTimer.start()
+                    self._dd_exstart_timer.stop()
+                    del self._dd_exstart_timer
+                self._dd_exstart_timer = Timer(self.ism.rxmt_interval, self._send_dd)
+                self._dd_exstart_timer.start()
 
             #do not need to make adjacency
             else:
@@ -200,10 +193,10 @@ class NSM(object):
 
     def _exchange(self):
         self.change_nsm_state('NSM_Exchange')
-        self._ddExStartTimer.stop()
+        self._dd_exstart_timer.stop()
         self.fp.set_ospf_header(
             self.ism.version,
-            self.ism.areaId,
+            self.ism.area_id,
             self.ism.rid,
             self.ism.options,
         )
@@ -214,20 +207,16 @@ class NSM(object):
         #start to send first lsr
         if len(self.ls_req) != 0:
             self._send_lsr(self.ls_req)
-            self._lsrResendTimer = Timer(self.ism.rxmtInterval, self._send_lsr, self.ls_req)
-            self._lsrResendTimer.start()
+            self.lsr_resend_timer = Timer(self.ism.rxmt_interval, self._send_lsr, self.ls_req)
+            self.lsr_resend_timer.start()
         else:
             self._full()
 
     def _full(self):
         self.change_nsm_state('NSM_Full')
-        # self.ism.ai.oi.msgHandler.record_event(
-        #     Event.str_event('SYNC_LSDB_OK', self.ism.ai.oi.processId, util.int2ip(self.rtid)))
-        #send message to backend server when getting to full state.
-        self.ism.ai.oi.send_put_lsa()
 
     def _seq_mismatch_or_bad_lsr(self):
-        LOG.warn('[NSM] %s Sequence mismatch or bad LSR.' % util.int2ip(self.rtid))
+        LOG.warn('[NSM] %s sequence mismatch or bad LSR.' % util.int2ip(self.rtid))
         #make sure that all these are clear
         self.ls_req = list()
         self.ls_rxmt = list()
@@ -237,25 +226,24 @@ class NSM(object):
         self.last_send_ts = 0
 
         self.change_nsm_state('NSM_ExStart')
-        self.ddFlags = 7    # set init bit, more bit, master bit
-        self.ddSeqnum = int(time.time())
+        self.dd_flags = 7    # set init bit, more bit, master bit
+        self.dd_seqnum = int(time.time())
         self._send_dd()
-        if self._ddExStartTimer is None:
-            # del self._ddExStartTimer
-            self._ddExStartTimer = Timer(self.ism.rxmtInterval, self._send_dd)
-            self._ddExStartTimer.start()
-        elif self._ddExStartTimer.isStop():
-            del self._ddExStartTimer
-            self._ddExStartTimer = Timer(self.ism.rxmtInterval, self._send_dd)
-            self._ddExStartTimer.start()
+        if self._dd_exstart_timer is None:
+            self._dd_exstart_timer = Timer(self.ism.rxmt_interval, self._send_dd)
+            self._dd_exstart_timer.start()
+        elif self._dd_exstart_timer.is_stop():
+            del self._dd_exstart_timer
+            self._dd_exstart_timer = Timer(self.ism.rxmt_interval, self._send_dd)
+            self._dd_exstart_timer.start()
         else:
-            self._ddExStartTimer.reset()
+            self._dd_exstart_timer.reset()
 
     def _send_dd(self, lsa=None):
 
         self.ep.set_ospf_header(
             self.ism.version,
-            self.ism.areaId,
+            self.ism.area_id,
             self.ism.rid,
             self.ism.options,
         )
@@ -265,6 +253,6 @@ class NSM(object):
     def _send_lsr(self, lsr):
         self.ep.send_lsr(self.ep.gen_lsr(lsr))
 
-    def change_nsm_state(self, newState):
-        LOG.info('[NSM] %s Change state to %s' % (util.int2ip(self.rtid), newState))
-        self.state = NSM_STATE[newState]
+    def change_nsm_state(self, newstate):
+        LOG.info('[NSM] %s change state to %s.' % (util.int2ip(self.rtid), newstate))
+        self.state = NSM_STATE[newstate]

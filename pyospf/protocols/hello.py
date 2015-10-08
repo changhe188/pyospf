@@ -3,10 +3,11 @@
 
 from dpkt.ospf import OSPF
 
-from pyospf.core.neighborStateMachine import *
-from pyospf.core.basics.ospfPacket import *
-from pyospf.core.basics.ospfSock import *
-from pyospf.core.protocols.protocol import *
+from pyospf.core.neighborStateMachine import NSM
+from pyospf.basic.ospfPacket import *
+from pyospf.basic.ospfSock import OspfSock
+from pyospf.basic.constant import *
+from pyospf.protocols.protocol import *
 from pyospf.utils import util
 
 
@@ -17,16 +18,16 @@ class HelloProtocol(OspfProtocol):
         OspfProtocol.__init__(self)
 
         self.netmask = 0
-        self.linkType = None
-        self.drIp = 0
-        self.bdrIp = 0
+        self.link_type = None
+        self.drip = 0
+        self.bdrip = 0
 
         self.ism = ism
-        self.nsmList = ism.nbrList
+        self.nsm_list = ism.nbr_list
 
         #ospf socket
         self._sock = OspfSock()
-        self._sock.bind(self.ism.ipIntfAddr)
+        self._sock.bind(self.ism.ip_intf_addr)
         self._sock.conn(ALL_SPF_ROUTER)
 
     def __del__(self):
@@ -34,36 +35,35 @@ class HelloProtocol(OspfProtocol):
 
     def set_conf(self, v, hi, di, r, a, m, o, t, dr, bdr):
         self.version = v
-        self.helloInterval = hi
-        self.deadInterval = di
+        self.hello_interval = hi
+        self.dead_interval = di
         self.area = util.ip2int(a)
         self.rid = util.ip2int(r)
         self.netmask = util.ip2int(m)
-        self.options = self.calc_ospf_options(o)
-        self.linkType = t
-        self.drIp = dr
-        self.bdrIp = bdr
+        self.options = self.convert_options_to_int(o)
+        self.link_type = t
+        self.drip = dr
+        self.bdrip = bdr
 
     def send_hello(self, pkt):
-        LOG.debug('[Hello] Send Hello')
+        LOG.debug('[Hello] Send Hello.')
         self._sock.sendp(pkt)
-        self.ism.ai.oi.sendHelloCount += 1
-        self.ism.ai.oi.totalSendPacketCount += 1
+        self.ism.ai.oi.stat.send_hello_count += 1
+        self.ism.ai.oi.stat.total_send_packet_count += 1
 
     def gen_hello(self):
-
         hello = Hello(
-            hellointerval=self.helloInterval,
-            deadinterval=self.deadInterval,
+            hellointerval=self.hello_interval,
+            deadinterval=self.dead_interval,
             mask=self.netmask,
             options=self.options,
-            router=self.drIp,
-            backup=self.bdrIp
+            router=self.drip,
+            backup=self.bdrip
         )
         for nbr in self.ism.neighbor:
             hello.data += str(HelloNeighbor(neighbor=nbr))
 
-        ospfPacket = OSPF(
+        ospf_packet = OSPF(
             v=self.version,
             type=1,             # 1 for hello
             area=self.area,
@@ -72,7 +72,7 @@ class HelloProtocol(OspfProtocol):
             data=hello
         )
 
-        return str(ospfPacket)
+        return str(ospf_packet)
 
     def check_hello(self, pkt):
         """
@@ -105,7 +105,7 @@ class HelloProtocol(OspfProtocol):
         #     LOG.warn('[Hello] Router %s area ID %s mismatch.' % (util.int2ip(nrid), util.int2ip(aid)))
         #     return False
 
-        if hi != self.helloInterval:
+        if hi != self.hello_interval:
             # self.ism.ai.oi.msgHandler.record_event(Event.str_event(
             #     'HELLO_TIMER_MISMATCH',
             #     self.ism.ai.oi.processId,
@@ -113,7 +113,7 @@ class HelloProtocol(OspfProtocol):
             # ))
             LOG.warn('[Hello] Router %s hello interval %d mismatch.' % (util.int2ip(nrid), hi))
             return False
-        if di != self.deadInterval:
+        if di != self.dead_interval:
             # self.ism.ai.oi.msgHandler.record_event(Event.str_event(
             #     'DEAD_TIMER_MISMATCH',
             #     self.ism.ai.oi.processId,
@@ -121,7 +121,7 @@ class HelloProtocol(OspfProtocol):
             # ))
             LOG.warn('[Hello] Router %s dead interval %d mismatch.' % (util.int2ip(nrid), di))
             return False
-        if self.linkType != 'Point-to-Point' and self.linkType != 'Virtual':
+        if self.link_type != 'Point-to-Point' and self.link_type != 'Virtual':
         #If linkType is p2p or virtual link, ignore this check
             if net != self.netmask:
                 # self.ism.ai.oi.msgHandler.record_event(Event.str_event(
@@ -151,42 +151,40 @@ class HelloProtocol(OspfProtocol):
         #TODO: check other options
 
         #Pass check, add to active neighbor
-        # neighborLock.acquire()
         if not nrid in self.ism.neighbor:
             LOG.info('[Hello] Add new active neighbor %s.' % util.int2ip(nrid))
             self.ism.neighbor.append(nrid)
 
             #Meanwhile, create an NSM for this router.
-            if not self.nsmList.has_key(nrid):
-                self.nsmList[nrid] = NSM(self.ism, nrid, pkt)
+            if not nrid in self.nsm_list:
+                self.nsm_list[nrid] = NSM(self.ism, nrid, pkt)
 
         LOG.debug('[NSM] %s Event: NSM_PacketReceived.' % util.int2ip(nrid))
-        self.nsmList[nrid].fire('NSM_PacketReceived')
-        # neighborLock.release()
+        self.nsm_list[nrid].fire('NSM_PacketReceived')
         return True
 
     def check_active_router(self, pkt):
-        activeNrid = pkt['V']['V']['NBORS']
+        active_nrid = pkt['V']['V']['NBORS']
         nrid = pkt['V']['RID']
 
-        if self.rid in activeNrid:
+        if self.rid in active_nrid:
             LOG.debug('[NSM] %s Event: NSM_TwoWayReceived.' % util.int2ip(nrid))
-            self.nsmList[nrid].fire('NSM_TwoWayReceived')
+            self.nsm_list[nrid].fire('NSM_TwoWayReceived')
             return True
         else:
             LOG.debug('[NSM] %s Event: NSM_OneWayReceived' % util.int2ip(nrid))
-            LOG.debug('[NSM] %s state is %s.' % (util.int2ip(nrid), self.nsmList[nrid].state))
-            if self.nsmList[nrid].state >= NSM_STATE['NSM_TwoWay']:
+            LOG.debug('[NSM] %s state is %s.' % (util.int2ip(nrid), self.nsm_list[nrid].state))
+            if self.nsm_list[nrid].state >= NSM_STATE['NSM_TwoWay']:
                 #This is not in RFC. When probe received hello without itself, make adj down.
                 LOG.info('[NSM] One way state. Reset adjacency with router %s.' % util.int2ip(nrid))
-                self.nsmList[nrid].reset()
-            self.nsmList[nrid].fire('NSM_OneWayReceived')
+                self.nsm_list[nrid].reset()
+            self.nsm_list[nrid].fire('NSM_OneWayReceived')
             return False
 
     def get_dr_bdr(self, pkt):
         nrid = pkt['V']['RID']
-        LOG.debug('[NSM] %s state is %s.' % (util.int2ip(nrid), self.nsmList[nrid].state))
-        if self.nsmList[nrid].state < NSM_STATE['NSM_TwoWay']:
+        LOG.debug('[NSM] %s state is %s.' % (util.int2ip(nrid), self.nsm_list[nrid].state))
+        if self.nsm_list[nrid].state < NSM_STATE['NSM_TwoWay']:
             return
         else:
             srcip = pkt['H']['SRC']
@@ -194,12 +192,12 @@ class HelloProtocol(OspfProtocol):
             bdr = pkt['V']['V']['BDESIG']
             prio = pkt['V']['V']['PRIO']
 
-            if self.drIp != dr:
+            if self.drip != dr:
                 if dr == srcip or bdr == srcip:
-                    self.drIp, self.bdrIp = dr, bdr
-                    self.ism.drIp, self.ism.bdrIp = dr, bdr
-                    LOG.debug('[ISM] DR/BDR found: %s, %s'
-                                   % (util.int2ip(self.ism.drIp), util.int2ip(self.ism.bdrIp)))
+                    self.drip, self.bdrip = dr, bdr
+                    self.ism.drip, self.ism.bdrip = dr, bdr
+                    LOG.debug('[ISM] DR/BDR found: %s, %s.'
+                                   % (util.int2ip(self.ism.drip), util.int2ip(self.ism.bdrip)))
 
                     LOG.info('[ISM] Event: ISM_BackupSeen.')
                     self.ism.fire('ISM_BackupSeen')

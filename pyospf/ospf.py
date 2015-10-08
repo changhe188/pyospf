@@ -9,7 +9,7 @@ from oslo.config import cfg
 from pyospf import config
 from pyospf import version
 from pyospf import log
-from core.ospfProbe import init
+from core.core import init_probe
 
 
 CONF = cfg.CONF
@@ -28,17 +28,27 @@ def main(args=None):
     LOG.info("Configuration:")
     CONF.log_opt_values(LOG, logging.INFO)
 
-    ocfg = dict()
-    ocfg['router_id'] = CONF.probe.router_id
-    ocfg['area'] = CONF.probe.area
-    ocfg['interface'] = CONF.probe.interface_name
-    ocfg['ip'] = CONF.probe.ip
-    ocfg['mask'] = CONF.probe.mask
-    ocfg['hello_interval'] = CONF.probe.hello_interval
-    ocfg['link_type'] = CONF.probe.link_type
-    ocfg['options'] = CONF.probe.options
-    ocfg['mtu'] = CONF.probe.mtu
-    ocfg['rxmt_interval'] = CONF.probe.rxmt_interval
+    probe_cfg = dict()
+    probe_cfg['router_id'] = CONF.probe.router_id
+    probe_cfg['area'] = CONF.probe.area
+    probe_cfg['interface'] = CONF.probe.interface_name
+    probe_cfg['ip'] = CONF.probe.ip
+    probe_cfg['mask'] = CONF.probe.mask
+    probe_cfg['hello_interval'] = CONF.probe.hello_interval
+    probe_cfg['link_type'] = CONF.probe.link_type
+    probe_cfg['options'] = CONF.probe.options
+    probe_cfg['mtu'] = CONF.probe.mtu
+    probe_cfg['rxmt_interval'] = CONF.probe.rxmt_interval
+    probe_cfg['packet_display'] = CONF.probe.packet_display
 
-    init(ocfg)
+    api_cfg = dict()
+    api_cfg['bind_host'] = CONF.api.bind_host
+    api_cfg['bind_port'] = CONF.api.bind_port
+    api_cfg['username'] = CONF.api.username
+    api_cfg['password'] = CONF.api.password
 
+    all_cfg = dict()
+    all_cfg['PROBE'] = probe_cfg
+    all_cfg['API'] = api_cfg
+
+    init_probe(all_cfg)

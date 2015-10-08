@@ -5,10 +5,10 @@ import datetime
 
 from dpkt.ospf import OSPF
 
-from pyospf.core.neighborStateMachine import *
-from pyospf.core.basics.ospfPacket import *
-from pyospf.core.basics.ospfSock import *
-from pyospf.core.protocols.protocol import *
+from pyospf.basic.constant import NSM_STATE
+from pyospf.basic.ospfPacket import *
+from pyospf.basic.ospfSock import OspfSock
+from pyospf.protocols.protocol import *
 
 
 class FloodProtocol(OspfProtocol):
@@ -20,7 +20,7 @@ class FloodProtocol(OspfProtocol):
 
         #ospf socket
         self._sock = OspfSock()
-        self._sock.bind(self.nsm.ism.ipIntfAddr)
+        self._sock.bind(self.nsm.ism.ip_intf_addr)
 
     def __del__(self):
         self._sock.close()
@@ -35,26 +35,22 @@ class FloodProtocol(OspfProtocol):
 
             #check lsa area
             aid = pkt['V']['AID']
-            if aid != util.ip2int(self.nsm.ism.areaId):
+            if aid != util.ip2int(self.nsm.ism.area_id):
                 LOG.warn('[Flood] LSU from wrong area %s.' % util.int2ip(aid))
                 return
 
             lsas = pkt['V']['V']['LSAS']
-            uniAck = []
+            uniack = []
 
-            for lsa in lsas.keys():
+            for lsa in lsas:
                 #check lsa chksum, step 1, this step has done in ospfParser
-
-                #print '**OPTS',lsas[lsa]['H']['OPTS']
-
                 #check allowed lsa type, step 2
                 tp = lsas[lsa]['H']['T']
-                #lsList = None
                 if tp not in ALLOW_LS_TYPE:
                     LOG.warn('[Flood] Nonsupport LS type.')
                     continue
                 else:
-                    lsList = self.lookup_lsa_list(tp, self.nsm.ism.ai.oi)
+                    lslist = self.nsm.ism.ai.oi.lsdb.lookup_lsa_list(tp)
 
                 #if type=5, check area type. if area is stub, drop it. step 3.
                 if tp == 5 and self.nsm.options['E'] == 0:
@@ -73,18 +69,18 @@ class FloodProtocol(OspfProtocol):
                     continue
 
                 #check lsu age, step 4
-                id, adv = lsas[lsa]['H']['LSID'], lsas[lsa]['H']['ADVRTR']
+                lsid, adv = lsas[lsa]['H']['LSID'], lsas[lsa]['H']['ADVRTR']
                 #generate lsa key,
                 # for type-5, ls key is (type, lsid, adv-rt),
                 # for other types, ls key is (type, areaid, lsid, adv-rt)
                 if tp == 5:
-                    ls = (tp, id, adv)
+                    ls = (tp, lsid, adv)
                 else:
-                    ls = (tp, aid, id, adv)
+                    ls = (tp, aid, lsid, adv)
                 age = lsas[lsa]['H']['AGE']
 
                 if age == MAXAGE and\
-                   ls not in lsList.keys() and\
+                   ls not in lslist.keys() and\
                    self.nsm.state != NSM_STATE['NSM_Exchange'] and\
                    self.nsm.state != NSM_STATE['NSM_Loading']:
 
@@ -92,20 +88,20 @@ class FloodProtocol(OspfProtocol):
                     LOG.info('[Flood] Received MAX age LSA %s. Send unicast LSAck.' % str(ls))
 
                     self._sock.conn(util.int2ip(self.nsm.src))
-                    lsaHdr = {1: lsas[lsa]}
-                    self.send_lsack(self.gen_lsack(lsaHdr))
+                    lsahdr = {1: lsas[lsa]}
+                    self.send_lsack(self.gen_lsack(lsahdr))
                     del lsas[lsa]
                     continue
 
                 #step 5
-                existLsa = self.lookup_lsa(ls, lsList)
+                exist_lsa = self.lookup_lsa(ls, lslist)
 
-                if existLsa is None or self.judge_new_lsa(existLsa['H'], lsas[lsa]['H']) == lsas[lsa]['H']:
-                    #check whether this lsa is added in lsList in MinLSArrival, if yes, drop it.
-                    if (existLsa is not None) and self.judge_new_lsa(existLsa['H'], lsas[lsa]['H']) == lsas[lsa]['H']:
+                if exist_lsa is None or self.judge_new_lsa(exist_lsa['H'], lsas[lsa]['H']) == lsas[lsa]['H']:
+                    #check whether this lsa is added in lslist in MinLSArrival, if yes, drop it.
+                    if (exist_lsa is not None) and self.judge_new_lsa(exist_lsa['H'], lsas[lsa]['H']) == lsas[lsa]['H']:
                         #step 5a
-                        existLsaTimestamp = util.strptime(datetimeLock, existLsa['TIMESTAMP'])
-                        if abs((existLsaTimestamp - datetime.datetime.now()).seconds) < MIN_LS_ARRIVAL:
+                        exist_lsa_timestamp = util.strptime(datetimeLock, exist_lsa['TIMESTAMP'])
+                        if abs((exist_lsa_timestamp - datetime.datetime.now()).seconds) < MIN_LS_ARRIVAL:
                             LOG.debug('[Flood] LSA received in MinLSArrival.')
                             continue
                         #TODO: flood this lsa to subset of the interfaces. step 5b
@@ -113,31 +109,27 @@ class FloodProtocol(OspfProtocol):
                             pass
 
                     #remove this lsa in all neighbors' ls_rxmt. step 5c
-                    for rid in self.nsm.ism.hp.nsmList:
-                        if self.nsm.ism.hp.nsmList[rid].ls_rxmt.count(lsas[lsa]) > 0:
-                            self.nsm.ism.hp.nsmList[rid].ls_rxmt.remove(lsas[lsa])
+                    for rid in self.nsm.ism.hp.nsm_list:
+                        if self.nsm.ism.hp.nsm_list[rid].ls_rxmt.count(lsas[lsa]) > 0:
+                            self.nsm.ism.hp.nsm_list[rid].ls_rxmt.remove(lsas[lsa])
 
                     #add timestamp and add this lsa to ls list. step 5d
                     lsas[lsa]['TIMESTAMP'] = util.current_time()
                     lsas[lsa]['AREA'] = aid
-                    lsdbLock.acquire()
-                    if ls in lsList and age == MAXAGE:
+                    self.nsm.ism.ai.oi.lsdb.lsdb_lock.acquire()
+                    if ls in lslist and age == MAXAGE:
                         #if the age is MAXAGE, delete this lsa in the list. Attention: this is not the rule in rfc.
                         LOG.info('[Flood] Received LSA %s of MAXAGE. Delete it in LSDB.' % str(ls))
-                        del lsList[ls]
-                        #send DEL message to backend immediately.
-                        self.nsm.ism.ai.oi.save_lsa_del(lsas[lsa])
-                        self.nsm.ism.ai.oi.send_del_lsa()
+                        del lslist[ls]
                     else:
-                        lsList[ls] = lsas[lsa]
-                        self.nsm.ism.ai.oi.save_lsa_update(lsas[lsa])
-                    lsdbLock.release()
+                        lslist[ls] = lsas[lsa]
+                    self.nsm.ism.ai.oi.lsdb.lsdb_lock.release()
 
                     #remove the lsa in ls_req if it exists in it. Attention: this is not the rule in rfc.
                     if ls in self.nsm.ls_req:
                         self.nsm.ls_req.remove(ls)
-                        if len(self.nsm.ls_req) == 0 and not self.nsm._lsrResendTimer.isStop():
-                            self.nsm._lsrResendTimer.stop()
+                        if len(self.nsm.ls_req) == 0 and not self.nsm.lsr_resend_timer.is_stop():
+                            self.nsm.lsr_resend_timer.stop()
                             #send lsack to neighbor
                             #self.send_lsack(self.gen_lsack(lsas))
                             #change nsm to full state
@@ -146,9 +138,8 @@ class FloodProtocol(OspfProtocol):
                                 continue
 
                     #TODO: maybe need to send lsack to receiver. step 5e
-
                     #if the lsa is self-originated, may need to do some special work. step 5f
-                    # As a probe, it will has no self-originated LSA. Skip this.
+                    #As a probe, it will has no self-originated LSA. Skip this.
 
                 #If lsa exists and the local one is newer or equal to the received lsa.
                 else:
@@ -158,23 +149,20 @@ class FloodProtocol(OspfProtocol):
                         self.nsm.fire('NSM_BadLSReq')
                         return
                     #if the existLSA is equal to this lsa, do as follow. step 7
-                    if not self.judge_new_lsa(existLsa['H'], lsas[lsa]['H']):
+                    if not self.judge_new_lsa(exist_lsa['H'], lsas[lsa]['H']):
                         #step 7a
                         if lsas[lsa] in self.nsm.ls_rxmt:
                             #implied acknowledgment
                             self.nsm.ls_rxmt.remove(lsas[lsa])
                         #need to send lsack to neighbor, step 7b
                         else:
-                            uniAck.append(lsas[lsa])
-#                            self.s.conn(utils.int2ip(self.nsm.d_router))
-#                            lsaHdr = {1:lsas[lsa]}
-#                            self.s.sendp(self.gen_lsack(lsaHdr))
+                            uniack.append(lsas[lsa])
                             del lsas[lsa]
                         continue
 
                     #if the existLSA is more recent, do as follow. step 8
-                    elif self.judge_new_lsa(existLsa['H'], lsas[lsa]['H']) == existLsa['H']:
-                        if existLsa['H']['AGE'] == MAXAGE and existLsa['H']['LSSEQNO'] == MAX_SEQ_NO:
+                    elif self.judge_new_lsa(exist_lsa['H'], lsas[lsa]['H']) == exist_lsa['H']:
+                        if exist_lsa['H']['AGE'] == MAXAGE and exist_lsa['H']['LSSEQNO'] == MAX_SEQ_NO:
                             LOG.warn('[Flood] MaxSequenceNumber LSA, drop it.')
                             del lsas[lsa]
                         else:
@@ -185,29 +173,25 @@ class FloodProtocol(OspfProtocol):
             #send lsack after handling all lsa
             else:
                 if len(self.nsm.ls_req) > 0:
-                    LOG.debug('[Exchange] Still have %s LSA to request.' % len(self.nsm.ls_req))
-                if len(uniAck) != 0:
+                    LOG.debug('[Exchange] Still have %s LSA(s) to request.' % len(self.nsm.ls_req))
+                if len(uniack) != 0:
                     LOG.debug('[Flood] Send LSAck to %s.' % util.int2ip(self.nsm.src))
-                    uniAcks = {}
-                    for indexAck in range(0, len(uniAck)):
-                        uniAcks[indexAck + 1] = uniAck[indexAck]
+                    uniacks = {}
+                    for indexack in range(0, len(uniack)):
+                        uniacks[indexack + 1] = uniack[indexack]
                     self._sock.conn(util.int2ip(self.nsm.src))
-                    self.send_lsack(self.gen_lsack(uniAcks))
+                    self.send_lsack(self.gen_lsack(uniacks))
 
                 if len(lsas) != 0:
-                    if self.nsm.ism.linkType == 'Broadcast':
+                    if self.nsm.ism.link_type == 'Broadcast':
                         dst = ALL_D_ROUTER
-                    elif self.nsm.ism.linkType == 'Point-to-Point':
+                    elif self.nsm.ism.link_type == 'Point-to-Point':
                         dst = ALL_SPF_ROUTER
                     else:
                         dst = ALL_SPF_ROUTER
                     LOG.debug('[Flood] Send multicast LSAck to %s.' % dst)
                     self._sock.conn(dst)
                     self.send_lsack(self.gen_lsack(lsas))
-
-                #send message to backend server when nsm is in full state.
-                if self.nsm.state == NSM_STATE['NSM_Full']:
-                    self.nsm.ism.ai.oi.send_put_lsa()
         else:
             LOG.warn('[Flood] NSM is under Exchange state, drop this LSU.')
             return
@@ -218,16 +202,16 @@ class FloodProtocol(OspfProtocol):
     def send_lsack(self, pkt):
         self._sock.sendp(pkt)
 
-        self.nsm.ism.ai.oi.sendLSAckCount += 1
-        self.nsm.ism.ai.oi.totalSendPacketCount += 1
+        self.nsm.ism.ai.oi.stat.send_lsack_count += 1
+        self.nsm.ism.ai.oi.stat.total_send_packet_count += 1
 
     def gen_lsack(self, lsas):
-        lsackData = []
+        lsackdata = []
         for lsa in lsas.keys():
             hdr = lsas[lsa]['H']
-            lsackData.append(str(LSAHeader(
+            lsackdata.append(str(LSAHeader(
                 age=hdr['AGE'],
-                options=self.calc_ospf_options(hdr['OPTS']),
+                options=self.convert_options_to_int(hdr['OPTS']),
                 type=hdr['T'],
                 id=hdr['LSID'],
                 adv=hdr['ADVRTR'],
@@ -236,14 +220,13 @@ class FloodProtocol(OspfProtocol):
                 len=hdr['L']
             )))
 
-        ospfData = ''.join(lsackData)
-        ospfPacket = OSPF(
+        ospfdata = ''.join(lsackdata)
+        ospf_packet = OSPF(
             v=self.version,
             type=5,             # 5 for lsack
             area=self.area,
-            len=len(ospfData)+len(OSPF()),
+            len=len(ospfdata)+len(OSPF()),
             router=self.rid,
-            data=ospfData
+            data=ospfdata
         )
-
-        return str(ospfPacket)
+        return str(ospf_packet)

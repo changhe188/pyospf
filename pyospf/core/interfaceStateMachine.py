@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-__author__ = 'changhe'
 
 import datetime
 import copy
+import logging
 
-from protocols.hello import *
-from basics.variable import *
+from pyospf.protocols.hello import HelloProtocol
+from pyospf.basic.constant import *
 from pyospf.utils.timer import Timer
+from pyospf.utils.util import *
 
 
 LOG = logging.getLogger(__name__)
@@ -19,58 +20,58 @@ class ISM(object):
     def __init__(self, ai):
         self.state = ISM_STATE['ISM_Down']
 
-        self.infTransDelay = 1  # TODO: how to set?
+        self.inf_trans_delay = 1  # TODO: how to set?
         self.prior = 0          # set probe priority 0 permanently
-        self.drIp = 0
-        self.bdrIp = 0
+        self.drip = 0
+        self.bdrip = 0
         self.neighbor = list()      # save all neighbors rid
-        self.nbrList = dict()       # save all neighbors' state(nsm), format: {nrid: nsm}
-        self.outputCost = 0     # TODO: how to set?
+        self.nbr_list = dict()       # save all neighbors' state(nsm), format: {nrid: nsm}
+        self.output_cost = 0     # TODO: how to set?
 
-        self.auType = 0         # TODO: Auth not implement
-        self.auKey = None       # TODO: Auth not implement
+        self.au_type = 0         # TODO: Auth not implement
+        self.au_key = None       # TODO: Auth not implement
 
-        self._helloTimer = None
-        self._electTimer = None
-        self._lsaAgeTimer = None
+        self._hello_timer = None
+        self._elect_timer = None
+        self._lsa_age_timer = None
 
-        self.lsaAgeStep = 4     # check LSA age interval
+        self.lsa_age_step = 1     # check LSA age interval
 
         self.ai = ai
 
         self.version = 2
         self.rid = ai.oi.rid
-        self.areaId = ai.area_id
-        self.helloInterval = ai.oi.config['hello_interval']
-        self.deadInterval = 4 * self.helloInterval
-        self.ipIntfAddr = ai.oi.config['ip']
-        self.ipInterMask = ai.oi.config['mask']
-        self.linkType = ai.oi.config['link_type']
+        self.area_id = ai.area_id
+        self.hello_interval = ai.oi.config['hello_interval']
+        self.dead_interval = 4 * self.hello_interval
+        self.ip_intf_addr = ai.oi.config['ip']
+        self.ip_intf_mask = ai.oi.config['mask']
+        self.link_type = ai.oi.config['link_type']
         self.options = ai.oi.config['options']
-        self.rxmtInterval = ai.oi.config['rxmt_interval']
+        self.rxmt_interval = ai.oi.config['rxmt_interval']
         self.mtu = ai.oi.config['mtu']
 
-        self.multiAreaCap = False
-        #rfc5185 multi-area adj support
-        if ai.oi.config.has_key('multiArea'):
-            self.multiAreaCap = True
-            self.multiArea = ai.oi.config['multiArea']
+        # self.multiAreaCap = False
+        # #rfc5185 multi-area adj support
+        # if ai.oi.config.has_key('multiArea'):
+        #     self.multiAreaCap = True
+        #     self.multiArea = ai.oi.config['multiArea']
 
         self.hp = HelloProtocol(self)
         self.ism = dict()
 
         #register all ism events
-        for ismEvent in ISM_EVENT.keys():
-            if ismEvent == 'ISM_InterfaceUp':
-                self.ism[ismEvent] = self._interface_up
-            elif ismEvent == 'ISM_InterfaceDown':
-                self.ism[ismEvent] = self._down
-            elif ismEvent == 'ISM_BackupSeen':
-                self.ism[ismEvent] = self._dr_other
-            elif ismEvent == 'ISM_WaitTimer':
-                self.ism[ismEvent] = self._dr_other
-            elif ismEvent == 'ISM_NeighborChange':
-                self.ism[ismEvent] = self._nbr_change
+        for ismevent in ISM_EVENT.keys():
+            if ismevent == 'ISM_InterfaceUp':
+                self.ism[ismevent] = self._interface_up
+            elif ismevent == 'ISM_InterfaceDown':
+                self.ism[ismevent] = self._down
+            elif ismevent == 'ISM_BackupSeen':
+                self.ism[ismevent] = self._dr_other
+            elif ismevent == 'ISM_WaitTimer':
+                self.ism[ismevent] = self._dr_other
+            elif ismevent == 'ISM_NeighborChange':
+                self.ism[ismevent] = self._nbr_change
             else:
                 continue
 
@@ -83,30 +84,30 @@ class ISM(object):
         """
         To interface down state
         """
-        if not self._helloTimer is None:
-            self._helloTimer.stop()
-            self._helloTimer = None
-        if not self._lsaAgeTimer is None:
-            self._lsaAgeTimer.stop()
-            self._lsaAgeTimer = None
-        if not self._electTimer is None:
-            self._electTimer.stop()
-            self._electTimer = None
+        if not self._hello_timer is None:
+            self._hello_timer.stop()
+            self._hello_timer = None
+        if not self._lsa_age_timer is None:
+            self._lsa_age_timer.stop()
+            self._lsa_age_timer = None
+        if not self._elect_timer is None:
+            self._elect_timer.stop()
+            self._elect_timer = None
         self.change_ism_state('ISM_Down')
-        self.drIp = 0
-        self.bdrIp = 0
+        self.drip = 0
+        self.bdrip = 0
         self.neighbor = list()
-        self.nbrList = dict()
+        self.nbr_list = dict()
 
     def _interface_up(self):
         """
         Handler for interface up event
         """
         #point to point link, go to point_to_point state directly
-        if self.linkType == 'Point-to-Point':
+        if self.link_type == 'Point-to-Point':
             self._point_to_point()
         #broadcast link, go to dr other state
-        elif self.linkType == 'Broadcast':
+        elif self.link_type == 'Broadcast':
             self._waiting()
         else:
             LOG.error('[ISM] Wrong Link Type.')
@@ -115,10 +116,10 @@ class ISM(object):
     def _waiting(self):
         self.change_ism_state('ISM_Waiting')
         self._begin_hello()
-        self._helloTimer = Timer(self.helloInterval, self._begin_hello)
-        self._helloTimer.start()
-        self._electTimer = Timer(self.deadInterval, self._elect_dr, once=True)
-        self._electTimer.start()
+        self._hello_timer = Timer(self.hello_interval, self._begin_hello)
+        self._hello_timer.start()
+        self._elect_timer = Timer(self.dead_interval, self._elect_dr, once=True)
+        self._elect_timer.start()
 
     def loopback(self):
         """
@@ -133,28 +134,28 @@ class ISM(object):
         """
         self.change_ism_state('ISM_PointToPoint')
         self._begin_hello()
-        self._helloTimer = Timer(self.helloInterval, self._begin_hello)
-        self._helloTimer.start()
+        self._hello_timer = Timer(self.hello_interval, self._begin_hello)
+        self._hello_timer.start()
         #start a timer to check all lsa age per lsaAgeStep second
         #TODO: this implementation should be checked.
-        if self._lsaAgeTimer is None:
-            self._lsaAgeTimer = Timer(self.lsaAgeStep, self._lsaAge)
-            self._lsaAgeTimer.start()
+        if self._lsa_age_timer is None:
+            self._lsa_age_timer = Timer(self.lsa_age_step, self._lsa_age)
+            self._lsa_age_timer.start()
             LOG.debug('[ISM] Start LSA age timer.')
 
     def _begin_hello(self):
         #start Hello Protocol
         self.hp.set_conf(
             self.version,
-            self.helloInterval,
-            self.deadInterval,
+            self.hello_interval,
+            self.dead_interval,
             self.rid,
-            self.areaId,
-            self.ipInterMask,
+            self.area_id,
+            self.ip_intf_mask,
             self.options,
-            self.linkType,
-            self.drIp,
-            self.bdrIp
+            self.link_type,
+            self.drip,
+            self.bdrip
         )
         self.hp.send_hello(self.hp.gen_hello())
 
@@ -163,36 +164,34 @@ class ISM(object):
         send hello in broadcast or nbma, not be dr
         """
         self.change_ism_state('ISM_DROther')
-        if not self._electTimer.isStop():
-            self._electTimer.stop()
+        if not self._elect_timer.is_stop():
+            self._elect_timer.stop()
         #start a timer to check all lsa age per lsaAgeStep second
         #TODO: this implementation should be checked.
-        if self._lsaAgeTimer is None:
-            self._lsaAgeTimer = Timer(self.lsaAgeStep, self._lsaAge)
-            self._lsaAgeTimer.start()
+        if self._lsa_age_timer is None:
+            self._lsa_age_timer = Timer(self.lsa_age_step, self._lsa_age)
+            self._lsa_age_timer.start()
             LOG.debug('[ISM] Start LSA age timer.')
 
     def _nbr_change(self):
         #Remove NSM which state is down
-        tobeRemoved = []
-        for nrid in self.nbrList:
-            if self.nbrList[nrid].state == NSM_STATE['NSM_Down']:
-                tobeRemoved.append(nrid)
+        tobe_removed = []
+        for nrid in self.nbr_list:
+            if self.nbr_list[nrid].state == NSM_STATE['NSM_Down']:
+                tobe_removed.append(nrid)
 
-        # neighborLock.acquire()
-        for rm in tobeRemoved:
-            if self.nbrList[rm].src == self.drIp:
-                self.drIp = 0
-            if self.nbrList[rm].src == self.bdrIp:
-                self.bdrIp = 0
-            del self.nbrList[rm]
+        for rm in tobe_removed:
+            if self.nbr_list[rm].src == self.drip:
+                self.drip = 0
+            if self.nbr_list[rm].src == self.bdrip:
+                self.bdrip = 0
+            del self.nbr_list[rm]
             self.neighbor.remove(rm)
-            LOG.info('[ISM] Neighbor %s delete.' % util.int2ip(rm))
-        # neighborLock.release()
+            LOG.info('[ISM] Neighbor %s is deleted.' % int2ip(rm))
 
-        if self.linkType == 'Broadcast':
-            if not self._electTimer.isStop():
-                self._electTimer.stop()
+        if self.link_type == 'Broadcast':
+            if not self._elect_timer.is_stop():
+                self._elect_timer.stop()
             self._elect_dr()
 
     def backup(self):
@@ -213,84 +212,53 @@ class ISM(object):
         """
         dr election algorithm
         """
-        #TODO: unimplement
+        #TODO: unimplemented
         LOG.debug('[ISM] Election Finished.')
         if self.state == ISM_STATE['ISM_Waiting']:
             #Receive some cross-thread flag change, and then fire the event
-            LOG.info('[ISM] Event: ISM_WaitTimer')
+            LOG.info('[ISM] Event: ISM_WaitTimer.')
             self.fire('ISM_WaitTimer')
         else:
             self._dr_other()
 
-    def change_ism_state(self, newState):
-        LOG.info("[ISM] Change state to %s" % newState)
-        self.state = ISM_STATE[newState]
+    def change_ism_state(self, newstate):
+        LOG.info("[ISM] Change state to %s." % newstate)
+        self.state = ISM_STATE[newstate]
 
-    def _lsaAge(self):
+    def _lsa_age(self):
         """
         Check all LSA age, and when LSA's age is MAXAGE, call aged handler
         """
-#        LOG.debug('[Age] start: %s:%f'%( time.strftime('%H:%M', time.localtime(time.time())), time.time() % 60))
-        delLsa = {'router': dict(),
-                'network': dict(),
-                'summary': dict(),
-                'sum-asbr': dict(),
-                'external': dict(),
-                'nssa': dict(),
-                'opaque-9': dict(),
-                'opaque-10': dict(),
-                'opaque-11': dict(),
-        }
-        delFlag = False
-        for lsList in (self.ai.routerLsa,
-                   self.ai.networkLsa,
-                   self.ai.summaryLsa,
-                   self.ai.summaryAsbrLsa,
-                   self.ai.oi.asExternalLsa,
-                   self.ai.opaque9Lsa,
-                   self.ai.opaque10Lsa,
-                   self.ai.oi.opaque11Lsa,
-                   self.ai.oi.nssaLsa
-            ):
-            tobeRemoved = list()
-            if len(lsList) == 0:
+        for lslist in self.ai.oi.lsdb.lsdb.values():
+            tobe_removed = list()
+            if len(lslist) == 0:
                 continue
             else:
-                lsdbLock.acquire()
-                for lsa in lsList:
-                    age = lsList[lsa]['H']['AGE']
-                    doNotAge = lsList[lsa]['H']['DNA']
-                    lsaTimestamp = util.strptime(datetimeLock, lsList[lsa]['TIMESTAMP'])
-                    #print lsList[lsa]['TIMESTAMP']
-                    nowAge = abs(lsaTimestamp - datetime.datetime.now()).seconds + age
+                self.ai.oi.lsdb.lsdb_lock.acquire()
+                for lsa in lslist:
+                    age = lslist[lsa]['H']['AGE']
+                    dna = lslist[lsa]['H']['DNA']
+                    lsa_ts = strptime(datetimeLock, lslist[lsa]['TIMESTAMP'])
+                    now_age = abs(lsa_ts - datetime.datetime.now()).seconds + age
 
                     #Remove aged LSA, rfc chap. 14
-                    if doNotAge == 0 and nowAge >= MAXAGE:
-                        for nrid in self.nbrList:
-                            if len(self.nbrList[nrid].ls_rxmt) == 0 and\
-                               (self.nbrList[nrid].state != NSM_STATE['NSM_Loading'] or
-                                self.nbrList[nrid].state != NSM_STATE['NSM_Exchange']):
-                                tobeRemoved.append(lsa)
-                lsdbLock.release()
-            tobeRemoved = list(set(tobeRemoved))
+                    if dna == 0 and now_age >= MAXAGE:
+                        for nrid in self.nbr_list:
+                            if len(self.nbr_list[nrid].ls_rxmt) == 0 and\
+                               (self.nbr_list[nrid].state != NSM_STATE['NSM_Loading'] or
+                                self.nbr_list[nrid].state != NSM_STATE['NSM_Exchange']):
+                                tobe_removed.append(lsa)
+                self.ai.oi.lsdb.lsdb_lock.release()
+            tobe_removed = list(set(tobe_removed))
 
-            if len(tobeRemoved) != 0:
-                LOG.info("[LSA] %s LSA(s) aged for reaching MAXAGE." % len(tobeRemoved))
-                delFlag = True
-                lsdbLock.acquire()
-                for rm in tobeRemoved:
-                    #Maybe we received aged LSA in flood first, then the LSA will be deleted by flood. If this, pass it.
-                    if rm not in lsList:
+            if len(tobe_removed) != 0:
+                LOG.info("[LSA] %s LSA(s) aged for reaching MAXAGE." % len(tobe_removed))
+                self.ai.oi.lsdb.lsdb_lock.acquire()
+                for rm in tobe_removed:
+                    #Maybe we received aged LSA in flood, then the LSA will be deleted by flood. If this, pass it.
+                    if rm not in lslist:
                         continue
-                    ls, tp, aid, lsid, adv = self.ai.oi.generate_lsa_key(lsList[rm])
-                    delLsa[self.ai.oi.lsa_tp_num2word(tp)][ls] = copy.deepcopy(lsList[rm])
-                    del lsList[rm]
-                lsdbLock.release()
-
-        if delFlag:
-            # send deleted lsa message to backend
-            self.ai.oi.msgHandler.send_message('LS', 'DEL', delLsa, needRecord=True)
-
-#        LOG.debug('[Age] stop: %s:%f'%( time.strftime('%H:%M', time.localtime(time.time())), time.time() % 60))
+                    del lslist[rm]
+                self.ai.oi.lsdb.lsdb_lock.release()
 
 

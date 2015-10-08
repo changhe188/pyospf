@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding:utf-8 -*-
 
-__author__ = 'changhe'
 
 import threading
 
@@ -52,7 +51,7 @@ class WorkerThread(threading.Thread):
                 # Just in case another thread grabbed the task 1st.
                     pass
 
-                    # Sleep until needed again
+            # Sleep until needed again
             self.busy = False
             if self._event is None:
                 self._event = threading.Event()
@@ -89,24 +88,3 @@ class ThreadPool(object):
 
     def addTask(self, function, args=(), kwargs={}):
         self._add_task(WorkerTask(function, args, kwargs))
-
-
-class GlobalThreadPool(object):
-    """ThreadPool Singleton class."""
-
-    _instance = None
-
-    def __init__(self):
-        """Create singleton instance """
-
-        if GlobalThreadPool._instance is None:
-        # Create and remember instance
-            GlobalThreadPool._instance = ThreadPool()
-
-    def __getattr__(self, attr):
-        """ Delegate get access to implementation """
-        return getattr(self._instance, attr)
-
-    def __setattr__(self, attr, val):
-        """ Delegate set access to implementation """
-        return setattr(self._instance, attr, val)

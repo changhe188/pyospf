@@ -8,7 +8,7 @@ import traceback
 
 class Sock(object):
 
-    def __init__(self, family, stype, proto=0, bufsize=1024*1024):
+    def __init__(self, family, stype, proto=0, bufsize=1024 * 1024):
         self.family = family
         self.type = stype
         self.proto = proto
@@ -19,14 +19,11 @@ class Sock(object):
         try:
             self.sock = socket.socket(self.family, self.type, self.proto)
             self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # self.sock.setsockopt(socket.SOL_SOCKET, 15, 1)
-            # print self.sock.getsockopt()
         except Exception, e:
             print e
 
     def bind(self, ip='0.0.0.0', port=0):
         self.sock.bind((ip, port))
-        #sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, interface);
 
     def conn(self, ip, port=0, timeout=0):
         try:

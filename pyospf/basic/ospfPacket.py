@@ -369,6 +369,7 @@ class Type7LSA(dpkt.Packet):
 
 import unittest
 
+
 class OspfPacketUnittest(unittest.TestCase):
 
     def setUp(self):

@@ -1,4 +1,3 @@
 ipaddr
-pyasn1
-PyCrypto
-dpkt
+dpkt=1.8
+flask
