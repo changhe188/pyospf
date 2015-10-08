@@ -1,0 +1,25 @@
+#!/usr/bin/env python
+# -*- coding:utf-8 -*-
+
+# Copyright 2015 Cisco Systems, Inc.
+# All rights reserved.
+
+
+import os
+import sys
+
+possible_topdir = os.path.normpath(os.path.join(os.path.abspath(__file__),
+                                                os.pardir,
+                                                os.pardir))
+if os.path.exists(os.path.join(possible_topdir,
+                               'pyospf',
+                               '__init__.py')):
+    sys.path.insert(0, possible_topdir)
+
+else:
+    possible_topdir = '/'
+
+from pyospf.ospf import main
+
+if __name__ == '__main__':
+    sys.exit(main())
