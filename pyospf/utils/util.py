@@ -241,6 +241,10 @@ def strptime(lock, time):
 
 
 def current_time():
+    return datetime.datetime.now()
+
+
+def current_time_str():
     return str(datetime.datetime.now())
 
 

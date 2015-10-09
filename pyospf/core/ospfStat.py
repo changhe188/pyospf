@@ -37,18 +37,21 @@ class OspfStat(object):
     def get_stat_all(self):
         stat_all = {
             'total_recv_pkt': self.total_received_packet_count,
-            'total_hdl_pkt': self.total_handled_packet_count,
-            'recv_hello': self.recv_hello_count,
-            'recv_dd': self.recv_dd_count,
-            'recv_lsr': self.recv_lsr_count,
-            'recv_lsu': self.recv_lsu_count,
-            'recv_lsack': self.recv_lsack_count,
-
+            'total_handle_pkt': self.total_handled_packet_count,
             'total_send_pkt': self.total_send_packet_count,
-            'send_hello': self.send_hello_count,
-            'send_dd': self.send_dd_count,
-            'send_lsr': self.send_lsr_count,
-            'send_lsu': self.send_lsu_count,
-            'send_lsack': self.send_lsack_count,
+            'detail_recv': {
+                'recv_hello': self.recv_hello_count,
+                'recv_dd': self.recv_dd_count,
+                'recv_lsr': self.recv_lsr_count,
+                'recv_lsu': self.recv_lsu_count,
+                'recv_lsack': self.recv_lsack_count,
+            },
+            'detail_send': {
+                'send_hello': self.send_hello_count,
+                'send_dd': self.send_dd_count,
+                'send_lsr': self.send_lsr_count,
+                'send_lsu': self.send_lsu_count,
+                'send_lsack': self.send_lsack_count,
+            }
         }
         return stat_all

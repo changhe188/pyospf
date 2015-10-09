@@ -114,7 +114,7 @@ class FloodProtocol(OspfProtocol):
                             self.nsm.ism.hp.nsm_list[rid].ls_rxmt.remove(lsas[lsa])
 
                     #add timestamp and add this lsa to ls list. step 5d
-                    lsas[lsa]['TIMESTAMP'] = util.current_time()
+                    lsas[lsa]['TIMESTAMP'] = util.current_time_str()
                     lsas[lsa]['AREA'] = aid
                     self.nsm.ism.ai.oi.lsdb.lsdb_lock.acquire()
                     if ls in lslist and age == MAXAGE:

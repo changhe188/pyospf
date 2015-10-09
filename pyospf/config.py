@@ -20,7 +20,7 @@ probe_opts = [
     cfg.IntOpt('hello_interval', default=10, help='OSPF hello interval in seconds'),
     cfg.IntOpt('mtu', default=1500, help='OSPF link MTU'),
     cfg.StrOpt('ip', help='OSPF network interface IP address'),
-    cfg.StrOpt('mask', help='OSPF network interface mask',),
+    cfg.StrOpt('mask', help='OSPF network interface mask'),
     cfg.StrOpt('interface_name', help='OSPF network interface name'),
     cfg.StrOpt('link_type', help='OSPF network interface link type'),
     cfg.StrOpt('options', help='OSPF options'),
@@ -42,13 +42,14 @@ message_opts = [
 
 ]
 
-api_group = cfg.OptGroup(name='api', title='Restful API configuration')
+api_group = cfg.OptGroup(name='api', title='API configuration')
 
 api_opts = [
-    cfg.StrOpt('bind_host', default='127.0.0.1', help='Restful API bind IP address'),
-    cfg.StrOpt('bind_port', default=7002, help='Restful API bind port',),
-    cfg.StrOpt('username', default='admin', help='Restful API username',),
-    cfg.StrOpt('password', default='admin', help='Restful API password',),
+    cfg.StrOpt('bind_host', default='127.0.0.1', help='API bind IP address'),
+    cfg.IntOpt('bind_port', default=7000, help='API bind port'),
+    cfg.BoolOpt('auth', default=True, help='API basic auth setting'),
+    cfg.StrOpt('username', default='admin', help='API basic auth username'),
+    cfg.StrOpt('password', default='admin', help='API basic auth password'),
 ]
 
 CONF.register_cli_opts(probe_opts, probe_group)

@@ -44,6 +44,7 @@ def main(args=None):
     api_cfg = dict()
     api_cfg['bind_host'] = CONF.api.bind_host
     api_cfg['bind_port'] = CONF.api.bind_port
+    api_cfg['auth'] = CONF.api.auth
     api_cfg['username'] = CONF.api.username
     api_cfg['password'] = CONF.api.password
 

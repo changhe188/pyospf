@@ -11,10 +11,10 @@ LOG = logging.getLogger(__name__)
 
 
 def init_probe(config):
-    LOG.info('[Probe] Init probe.')
+    LOG.info('[Core] Init probe.')
     oi = OspfInstance(config['PROBE'])
 
-    LOG.info('[API] Init API server.')
+    LOG.info('[Core] Init API server.')
     api_thrd = threading.Thread(target=init_api, args=(config['API'], oi))
     api_thrd.setDaemon(True)
     api_thrd.start()

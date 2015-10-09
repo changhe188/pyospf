@@ -12,40 +12,54 @@ $bin/ ./pyospfd
 
 ## Get data using HTTP API
 
-A server is running on TCP port 7000(defualt).
+A server is running within the program.
+
+it is listening the TCP port 7000 by default.
 
 Try following APIs to get the OSPF data.
 
 ### Get LSDB
 
 ```
-Get http://<ip>:7000/lsdb
+Get http://<bind_host>:<bind_port>/lsdb
+```
+
+### Get LSDB summary
+ 
+```
+Get http://<bind_host>:<bind_port>/lsdb_summary
 ```
 
 ### Get LSA by type
 
 ```
-Get http://<ip>:7000/lsdb/router
+Get http://<bind_host>:/lsdb/router
 
-Get http://<ip>:7000/lsdb/network
+Get http://<bind_host>:<bind_port>/lsdb/network
 
-Get http://<ip>:7000/lsdb/summary
+Get http://<bind_host>:<bind_port>/lsdb/summary
 
-Get http://<ip>:7000/lsdb/sum-asbr
+Get http://<bind_host>:<bind_port>/lsdb/sum-asbr
 
-Get http://<ip>:7000/lsdb/external
+Get http://<bind_host>:<bind_port>/lsdb/external
 
-Get http://<ip>:7000/lsdb/nssa
+Get http://<bind_host>:<bind_port>/lsdb/nssa
 
-Get http://<ip>:7000/lsdb/opaque-9
+Get http://<bind_host>:<bind_port>/lsdb/opaque-9
 
-Get http://<ip>:7000/lsdb/opaque-10
+Get http://<bind_host>:<bind_port>/lsdb/opaque-10
 
-Get http://<ip>:7000/lsdb/opaque-11
+Get http://<bind_host>:<bind_port>/lsdb/opaque-11
 ```
 
 ### Get Statistics
  
 ```
-Get http://<ip>:7000/stat
+Get http://<bind_host>:<bind_port>/stats
+```
+
+### Get probe status
+ 
+```
+Get http://<bind_host>:<bind_port>/probe
 ```
