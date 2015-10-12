@@ -7,7 +7,7 @@ pyospf is an OSPF implementation in Python. It can be used for making OSPF adjac
 Run it by executing following command.
 
 ```
-$bin/ ./pyospfd
+$bin# ./pyospfd
 ```
 
 ## Get data using HTTP API
@@ -17,6 +17,8 @@ A server is running within the program.
 it is listening the TCP port 7000 by default.
 
 Try following APIs to get the OSPF data.
+
+Noted: Use basic auth mode with the authentication data configured in config file when using the API. 
 
 ### Get LSDB
 
@@ -33,7 +35,7 @@ Get http://<bind_host>:<bind_port>/lsdb_summary
 ### Get LSA by type
 
 ```
-Get http://<bind_host>:/lsdb/router
+Get http://<bind_host>:<bind_port>/lsdb/router
 
 Get http://<bind_host>:<bind_port>/lsdb/network
 
