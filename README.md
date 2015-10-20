@@ -1,6 +1,6 @@
 # pyospf
 
-pyospf is an OSPF implementation in Python. It can be used for making OSPF adjacency and obtaining LSDB.
+pyospf is an OSPF probe implementation in Python. It can be used for making OSPF adjacency and obtaining LSDB.
 
 ## Run it
 
@@ -65,3 +65,7 @@ Get http://<bind_host>:<bind_port>/stats
 ```
 Get http://<bind_host>:<bind_port>/probe
 ```
+
+## Thanks
+
+Special thanks to *PyRT(Python Routeing Toolkit)*. I used its OSPF module as the OSPF PDU parsers.
