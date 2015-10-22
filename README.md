@@ -4,7 +4,7 @@
 
 ## Run it
 
-Run it by executing following command. It will load the config file located in ./conf/pyospf.ini and run pyospf in the front.
+Run it by executing following command. It will load the config file located in ./etc/pyospf.ini and run pyospf in the front.
 
 ```
 $bin# ./pyospfd
@@ -16,7 +16,7 @@ Apart from this, you can also use 'nohup' to run it in daemon.
 
 A HTTP server is running within the program. It is listening the TCP port 7000 by default.
 
-Try following APIs to get the OSPF data. (All APIs are used HTTP **GET** method.) 
+Try following APIs to get the OSPF data. (All APIs use HTTP **GET** method.) 
 
 **Noted**: Use basic auth mode with the authentication data configured in config file when using the API. 
 
