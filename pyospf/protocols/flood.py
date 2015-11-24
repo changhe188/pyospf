@@ -41,7 +41,6 @@ class FloodProtocol(OspfProtocol):
 
             lsas = pkt['V']['V']['LSAS']
             uniack = []
-            tobe
 
             for lsa in lsas:
                 #check lsa chksum, step 1, this step has done in ospfParser
