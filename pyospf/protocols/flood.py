@@ -41,6 +41,7 @@ class FloodProtocol(OspfProtocol):
 
             lsas = pkt['V']['V']['LSAS']
             uniack = []
+            tobe
 
             for lsa in lsas:
                 #check lsa chksum, step 1, this step has done in ospfParser
@@ -90,7 +91,6 @@ class FloodProtocol(OspfProtocol):
                     self._sock.conn(util.int2ip(self.nsm.src))
                     lsahdr = {1: lsas[lsa]}
                     self.send_lsack(self.gen_lsack(lsahdr))
-                    del lsas[lsa]
                     continue
 
                 #step 5
@@ -157,14 +157,12 @@ class FloodProtocol(OspfProtocol):
                         #need to send lsack to neighbor, step 7b
                         else:
                             uniack.append(lsas[lsa])
-                            del lsas[lsa]
                         continue
 
                     #if the existLSA is more recent, do as follow. step 8
                     elif self.judge_new_lsa(exist_lsa['H'], lsas[lsa]['H']) == exist_lsa['H']:
                         if exist_lsa['H']['AGE'] == MAXAGE and exist_lsa['H']['LSSEQNO'] == MAX_SEQ_NO:
                             LOG.warn('[Flood] MaxSequenceNumber LSA, drop it.')
-                            del lsas[lsa]
                         else:
                             #Send a lsu to the neighbor if it didn't be sent in MinLSArrival,
                             # This not necessary in probe, so we send lsack to neighbor.
