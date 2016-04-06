@@ -48,9 +48,9 @@ class OspfInstance(object):
         self.interface_mame = self.config['interface']
         self.local_ip = self.config['ip']
 
-        #Check config parameters legality
+        # Check config parameters legality
         if self.config['hello_interval'] < 1 or self.config['hello_interval'] > 65535:
-            LOG.critical('[OSPF Instance] Hello interval is beyond limitation.')
+            LOG.critical('[OSPF Instance] Hello interval is beyond the limitation.')
             return
         try:
             self.config['options'] = OspfProtocol.parse_options_config(self.config['options'])
@@ -58,7 +58,7 @@ class OspfInstance(object):
             LOG.critical('[OSPF Instance] Options is illegal.')
             return
 
-        #The probe only connect to one area, so area list has no meaning.
+        # The probe only connect to one area, so area list has no meaning.
         self.area = OspfArea(self)
         self.area_list[self.area.area_id] = self.area
 
@@ -67,25 +67,25 @@ class OspfInstance(object):
         self.recv = OspfReceiver(self.area.interface, self.area.interface.nbr_list, self.config['packet_display'])
         self._sock = None   # socket for receiving ospf packets
 
-        #Statistics
+        # Statistics
         self.stat = OspfStat()
 
     def run(self):
         """
         Main thread
         """
-        #gives an interface up message to ism
+        # gives an interface up message to ism
         self.area.interface.fire('ISM_InterfaceUp')
         if self.area.interface.state == ISM_STATE['ISM_Down']:
             LOG.error('[OSPF Instance] Interface up failed.')
             return
 
-        #open a socket to listen ospf port to avoid sending icmp protocol unreachable
+        # open a socket to listen ospf port to avoid sending icmp protocol unreachable
         self._sock = OspfSock()
         self._sock.bind_ospf_multicast_group(self.interface_mame)
         self._sock.add_ospf_multicast_group(self.local_ip)
 
-        #bind signal handler to handle terminal signal
+        # bind signal handler to handle terminal signal
         signal.signal(signal.SIGTERM, self.term_handler)
         signal.signal(signal.SIGINT, self.term_handler)
 
@@ -104,5 +104,5 @@ class OspfInstance(object):
     def exit(self):
         self._sock.drop_ospf_multicast_group(self.local_ip)
         self._sock.close()
-        LOG.info('[OSPF Instance] Program exit.')
+        LOG.info('[OSPF Instance] Program exits.')
         exit(0)

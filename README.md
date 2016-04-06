@@ -1,18 +1,20 @@
 # pyospf
 
-**pyospf** is an OSPF probe implementation in Python. It can be used for making OSPF adjacency and retrieving LSDB.
+**pyospf** is an OSPF probe implementation in Python. It is designed for making OSPF adjacency with router to retrieve LSDB for real-time monitor or future analysis.
 
 ## Run it
 
-Run it by executing following command. It will load the config file located in ./etc/pyospf.ini and run pyospf in the front.
+Run it by executing following command. It will load the config file located in ./etc/pyospf.ini and then run **pyospf** in the front.
 
 ```
-$bin# ./pyospfd
+$ ./pyospfd
 ```
 
 Apart from this, you can also use 'nohup' to run it in daemon.
 
-## Retrieving data using HTTP API
+## Retrieving data 
+
+### using HTTP API
 
 A HTTP server is running within the program. It is listening the TCP port 7000 by default.
 
@@ -20,19 +22,19 @@ Try following APIs to get the OSPF data. (All APIs use HTTP **GET** method.)
 
 **Noted**: Use basic auth mode with the authentication data configured in config file when using the API. 
 
-### Get LSDB
+#### Get LSDB
 
 ```
 http://<bind_host>:<bind_port>/lsdb
 ```
 
-### Get LSDB summary
+#### Get LSDB summary
  
 ```
 http://<bind_host>:<bind_port>/lsdb_summary
 ```
 
-### Get LSA by type
+#### Get LSA by type
 
 ```
 http://<bind_host>:<bind_port>/lsdb/router
@@ -54,17 +56,21 @@ http://<bind_host>:<bind_port>/lsdb/opaque-10
 http://<bind_host>:<bind_port>/lsdb/opaque-11
 ```
 
-### Get Statistics
+#### Get Statistics
  
 ```
 http://<bind_host>:<bind_port>/stats
 ```
 
-### Get probe status
+#### Get probe status
  
 ```
 http://<bind_host>:<bind_port>/probe
 ```
+
+### Store data in database
+
+We plan to implement this in near future.
 
 ## Thanks
 
